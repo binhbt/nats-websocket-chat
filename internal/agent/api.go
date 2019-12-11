@@ -51,21 +51,25 @@ type Limiter interface {
 }
 
 func (api *API) connect(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("start aaaa0")
 	conn, err := api.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("error while upgrading to ws connection: %v", err), 500)
 		return
 	}
-
+	fmt.Println("start aaaa1")
 	req, err := api.waitConnInit(conn)
+	fmt.Println("start aaaa2")
 	if err != nil {
+		fmt.Println("start err")
+		fmt.Println(err)
 		if err == errConnClosed {
 			return
 		}
 		writeErr(conn, err.Error())
 		return
 	}
-
+	fmt.Println("start aaaa")
 	agent := New(api.broker, api.store)
 	agent.HandleConn(conn, req)
 }
@@ -78,38 +82,80 @@ type initConReq struct {
 }
 
 func (api *API) bindReq(r *initConReq) error {
+	fmt.Println("??start bindReq")
+	fmt.Println("??secret")
+	fmt.Println(r.Secret)
+	fmt.Println("??channel")
+	fmt.Println(r.Channel)
+	fmt.Println("??uid")
+	fmt.Println(r.UID)
 	if !alfaRgx.MatchString(r.Secret) {
 		return errors.New("secret must contain only alphanumeric and underscores")
 	}
 	if !alfaRgx.MatchString(r.Channel) {
 		return errors.New("channel must contain only alphanumeric and underscores")
 	}
-
-	return api.rlim.ExceedsAny(map[string]goch.Limit{
-		r.UID:     goch.UIDLimit,
-		r.Secret:  goch.SecretLimit,
-		r.Channel: goch.ChanLimit,
-	})
+	fmt.Println("??end bindreq")
+	return nil
+	// return api.rlim.ExceedsAny(map[string]goch.Limit{
+	// 	r.UID:     goch.UIDLimit,
+	// 	r.Secret:  goch.SecretLimit,
+	// 	r.Channel: goch.ChanLimit,
+	// })
 }
 
 var errConnClosed = errors.New("connection closed")
 
-func (api *API) waitConnInit(conn *websocket.Conn) (*initConReq, error) {
+/* func (api *API) waitConnInit(conn *websocket.Conn) (*initConReq, error) {
+	fmt.Println("x1")
 	t, wsr, err := conn.NextReader()
 	if err != nil || t == websocket.CloseMessage {
+		fmt.Println("x2")
 		return nil, errConnClosed
 	}
 
 	var req *initConReq
-
+	fmt.Println("x3")
+	fmt.Println(req)
+	fmt.Println(wsr)
 	err = json.NewDecoder(wsr).Decode(req)
 	if err != nil {
+		fmt.Println("x4")
 		return nil, err
 	}
-
+	fmt.Println("x5")
 	if err = api.bindReq(req); err != nil {
+		fmt.Println("x6")
 		return nil, err
 	}
-
+	fmt.Println("x7")
 	return req, nil
+} */
+func (api *API) waitConnInit(conn *websocket.Conn) (*initConReq, error) {
+	// TODO - Add join timeout
+	fmt.Println("x1")
+	t, wsr, err := conn.NextReader()
+	if err != nil || t == websocket.CloseMessage {
+		fmt.Println("x2")
+		return nil, errConnClosed
+	}
+
+	var req initConReq
+	fmt.Println("x3")
+	// fmt.Println(req)
+	// fmt.Println(wsr)
+	err = json.NewDecoder(wsr).Decode(&req)
+	// fmt.Println("decode")
+	// fmt.Println(err)
+	if err != nil {
+		fmt.Println("x4")
+		return nil, err
+	}
+	fmt.Println("x5")
+	if err = api.bindReq(&req); err != nil {
+		fmt.Println("x6")
+		return nil, err
+	}
+	fmt.Println("x7")
+	return &req, nil
 }

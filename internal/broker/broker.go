@@ -41,6 +41,8 @@ type ChatStore interface {
 // Subscribe subscribes to provided chat id at start sequence
 // Returns close subscription func, or an error.
 func (b *Broker) Subscribe(chatID, uid string, start uint64, c chan *goch.Message) (func(), error) {
+	fmt.Println("Subscribe")
+	fmt.Println(start)
 	closer, err := b.mq.SubscribeSeq("chat."+chatID, uid, start, func(seq uint64, data []byte) {
 		msg, err := goch.DecodeMsg(data)
 		if err != nil {
@@ -112,6 +114,5 @@ func (b *Broker) Send(chatID string, msg *goch.Message) error {
 	if err != nil {
 		return err
 	}
-
 	return b.mq.Send("chat."+chatID, data)
 }

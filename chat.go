@@ -14,7 +14,6 @@ func NewChannel(name string, private bool) *Chat {
 		Name:    name,
 		Members: make(map[string]*User),
 	}
-
 	if private {
 		ch.Secret = newSecret()
 	}

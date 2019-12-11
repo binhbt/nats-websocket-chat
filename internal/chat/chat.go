@@ -75,13 +75,21 @@ func (cr *createReq) Bind() error {
 func (api *API) createChannel(w http.ResponseWriter, r *http.Request) {
 	var req createReq
 	if err := render.Bind(w, r, &req); err != nil {
+		fmt.Println("?????")
+		fmt.Println(err)
 		return
 	}
+	fmt.Println("req.Name")
+	fmt.Println(req.Name)
+	fmt.Println("req.IsPrivate")
+	fmt.Println(req.IsPrivate)
 	ch := goch.NewChannel(req.Name, req.IsPrivate)
 	if err := api.store.Save(ch); err != nil {
 		http.Error(w, fmt.Sprintf("could not create channel: %v", err), 500)
 		return
 	}
+	fmt.Println("secret key")
+	fmt.Println(ch.Secret)
 	render.JSON(w, ch.Secret)
 }
 
@@ -108,13 +116,14 @@ func (r *registerReq) Bind() error {
 	if !mailRgx.MatchString(r.Email) {
 		return errors.New("invalid email address")
 	}
-	return exceedsAny(map[string]goch.Limit{
-		r.UID:           goch.UIDLimit,
-		r.DisplayName:   goch.DisplayNameLimit,
-		r.ChannelSecret: goch.ChanSecretLimit,
-		r.Secret:        goch.SecretLimit,
-		r.Channel:       goch.ChanLimit,
-	})
+	// return exceedsAny(map[string]goch.Limit{
+	// 	r.UID:           goch.UIDLimit,
+	// 	r.DisplayName:   goch.DisplayNameLimit,
+	// 	r.ChannelSecret: goch.ChanSecretLimit,
+	// 	r.Secret:        goch.SecretLimit,
+	// 	r.Channel:       goch.ChanLimit,
+	// })
+	return nil
 }
 
 func (api *API) register(w http.ResponseWriter, r *http.Request) {

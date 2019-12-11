@@ -181,6 +181,7 @@ func (s *Client) GetUnreadCount(uid string, id string) uint64 {
 func (s *Client) Save(ct *goch.Chat) error {
 	data, err := ct.Encode()
 	if err != nil {
+		fmt.Println("redis error")
 		return err
 	}
 

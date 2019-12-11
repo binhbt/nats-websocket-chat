@@ -57,6 +57,7 @@ const (
 	errorMsg
 	infoMsg
 	historyReqMsg
+	statusMSG
 )
 
 const (
@@ -71,15 +72,18 @@ type msg struct {
 
 // HandleConn handles websocket communication for requested chat/client
 func (a *Agent) HandleConn(conn *websocket.Conn, req *initConReq) {
+	fmt.Println("start HandleConn")
 	a.conn = conn
 
 	a.conn.SetCloseHandler(func(code int, text string) error {
+		fmt.Println("on close HandleConn")
 		a.closed = true
 		a.done <- struct{}{}
 		return nil
 	})
 
 	ct, err := a.store.Get(req.Channel)
+	// fmt.Println(ct)
 	if err != nil {
 		writeFatal(a.conn, fmt.Sprintf("agent: unable to find chat: %v", err))
 		return
@@ -91,6 +95,8 @@ func (a *Agent) HandleConn(conn *websocket.Conn, req *initConReq) {
 	// }
 
 	user, err := ct.Join(req.UID, req.Secret)
+	fmt.Println("user info")
+	fmt.Println(user)
 	if err != nil {
 		writeFatal(a.conn, fmt.Sprintf("agent: unable to join chat: %v", err))
 		return
@@ -105,11 +111,14 @@ func (a *Agent) HandleConn(conn *websocket.Conn, req *initConReq) {
 
 		if req.LastSeq != nil {
 			close, err = a.mb.Subscribe(req.Channel, user.UID, *req.LastSeq, mc)
+			fmt.Println("--- Subscribe")
 		} else if seq, err := a.pushRecent(); err != nil {
 			writeErr(a.conn, fmt.Sprintf("agent: unable to fetch chat history: %v", err))
 			close, err = a.mb.SubscribeNew(req.Channel, user.UID, mc)
+			fmt.Println("--- SubscribeNew")
 		} else {
 			close, err = a.mb.Subscribe(req.Channel, user.UID, seq, mc)
+			fmt.Println("--- Subscribe????")
 		}
 
 		if err != nil {
@@ -189,12 +198,19 @@ func (a *Agent) handleClientMsg(r io.Reader) {
 		writeErr(a.conn, fmt.Sprintf("invalid message format: %v", err))
 		return
 	}
-
+	// fmt.Println("message.Type")
+	// fmt.Println(message.Type)
+	// historyMsg
+	// errorMsg
+	// infoMsg
+	// historyReqMsg
 	switch message.Type {
 	case chatMsg:
 		a.handleChatMsg(message.Data)
 	case historyReqMsg:
 		a.handleHistoryReqMsg(message.Data)
+	case statusMSG:
+		a.handleStatusMsg(message.Data)
 	}
 }
 
@@ -202,6 +218,9 @@ type message struct {
 	Meta map[string]string `json:"meta"`
 	Seq  uint64            `json:"seq"`
 	Text string            `json:"text"`
+}
+type statusmessage struct {
+	Status string `json:"status"`
 }
 
 func (a *Agent) handleChatMsg(raw json.RawMessage) {
@@ -235,12 +254,41 @@ func (a *Agent) handleChatMsg(raw json.RawMessage) {
 		writeErr(a.conn, fmt.Sprintf("could not forward your message. try again: %v", err))
 	}
 }
+func (a *Agent) handleStatusMsg(raw json.RawMessage) {
+	var msg statusmessage
 
+	err := json.Unmarshal(raw, &msg)
+	if err != nil {
+		writeErr(a.conn, fmt.Sprintf("invalid text message format: %v", err))
+		return
+	}
+
+	// if msg.Text == "" {
+	// 	writeErr(a.conn, "sent empty message")
+	// 	return
+	// }
+
+	// if len(msg.Text) > 1024 {
+	// 	writeErr(a.conn, "exceeded max message length of 1024 characters")
+	// 	return
+	// }
+
+	err = a.mb.Send(a.chat.Name, &goch.Message{
+		Meta:     msg.Meta,
+		Text:     msg.Text,
+		Seq:      msg.Seq,
+		FromName: a.displayName,
+		FromUID:  a.uid,
+		Time:     time.Now().UnixNano(),
+	})
+	if err != nil {
+		writeErr(a.conn, fmt.Sprintf("could not forward your message. try again: %v", err))
+	}
+}
 func (a *Agent) handleHistoryReqMsg(raw json.RawMessage) {
 	var req struct {
 		To uint64 `json:"to"`
 	}
-
 	err := json.Unmarshal(raw, &req)
 	if err != nil {
 		writeErr(a.conn, fmt.Sprintf("invalid history request message format: %v", err))
@@ -250,8 +298,11 @@ func (a *Agent) handleHistoryReqMsg(raw json.RawMessage) {
 	if req.To <= 0 {
 		return
 	}
-
+	fmt.Println("x buildHistoryBatch")
 	msgs, err := a.buildHistoryBatch(req.To)
+	fmt.Println("buildHistoryBatch")
+	fmt.Println(msgs)
+
 	if err != nil {
 		writeErr(a.conn, fmt.Sprintf("could not fetch chat history: %v", err))
 		return
@@ -267,30 +318,41 @@ func (a *Agent) handleHistoryReqMsg(raw json.RawMessage) {
 
 func (a *Agent) buildHistoryBatch(to uint64) ([]*goch.Message, error) {
 	var offset uint64
-
+	fmt.Println("x maxHistoryCount")
+	fmt.Println(maxHistoryCount)
 	if to >= maxHistoryCount {
 		offset = to - maxHistoryCount
 	}
-
+	fmt.Println(offset)
 	mc := make(chan *goch.Message)
-
+	fmt.Println("a.mb.Subscribe")
 	close, err := a.mb.Subscribe(a.chat.Name, "", offset, mc)
 	if err != nil {
 		return nil, err
 	}
 
 	defer close()
-
+	fmt.Println("goch.Message")
+	fmt.Println(mc)
 	var msgs []*goch.Message
-
+	// fmt.Println(len(mc))
 	for {
-		msg := <-mc
+		fmt.Println("next")
+		msg, ok := <-mc
+		if !ok {
+			break
+		}
+		fmt.Println("msg")
+		fmt.Println(msg)
+		fmt.Println(msg.Seq)
 		if msg.Seq >= to {
 			break
 		}
 		msgs = append(msgs, msg)
-	}
 
+	}
+	fmt.Println("goch.msgs")
+	fmt.Println(msgs)
 	return msgs, nil
 }
 
